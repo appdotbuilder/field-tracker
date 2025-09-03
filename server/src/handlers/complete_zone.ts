@@ -1,17 +1,40 @@
+import { db } from '../db';
+import { zoneAssignmentsTable } from '../db/schema';
 import { type CompleteZoneInput, type ZoneAssignment } from '../schema';
+import { eq } from 'drizzle-orm';
 
-export async function completeZone(input: CompleteZoneInput): Promise<ZoneAssignment> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is marking a zone assignment as completed.
-    // Should validate that the assignment exists and belongs to the requesting user
-    // Should set status to 'completed' and update completed_at timestamp
-    return Promise.resolve({
-        id: input.assignment_id,
-        zone_id: 0,
-        user_id: 0,
+export const completeZone = async (input: CompleteZoneInput): Promise<ZoneAssignment> => {
+  try {
+    // First verify the assignment exists
+    const existingAssignment = await db.select()
+      .from(zoneAssignmentsTable)
+      .where(eq(zoneAssignmentsTable.id, input.assignment_id))
+      .execute();
+
+    if (existingAssignment.length === 0) {
+      throw new Error('Zone assignment not found');
+    }
+
+    const assignment = existingAssignment[0];
+
+    // Check if already completed
+    if (assignment.status === 'completed') {
+      throw new Error('Zone assignment is already completed');
+    }
+
+    // Update the assignment to completed status with current timestamp
+    const result = await db.update(zoneAssignmentsTable)
+      .set({
         status: 'completed',
-        progress_houses: 0,
-        assigned_at: new Date(),
         completed_at: new Date()
-    } as ZoneAssignment);
-}
+      })
+      .where(eq(zoneAssignmentsTable.id, input.assignment_id))
+      .returning()
+      .execute();
+
+    return result[0];
+  } catch (error) {
+    console.error('Zone completion failed:', error);
+    throw error;
+  }
+};

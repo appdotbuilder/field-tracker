@@ -1,8 +1,20 @@
+import { db } from '../db';
+import { zonesTable } from '../db/schema';
 import { type Zone } from '../schema';
 
-export async function getZones(): Promise<Zone[]> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is fetching all available zones from the database.
-    // Should include zone creator information for admin views
-    return Promise.resolve([]);
-}
+export const getZones = async (): Promise<Zone[]> => {
+  try {
+    const results = await db.select()
+      .from(zonesTable)
+      .execute();
+
+    // Convert numeric fields back to numbers before returning
+    return results.map(zone => ({
+      ...zone,
+      // No numeric conversions needed for this table - all fields are already correct types
+    }));
+  } catch (error) {
+    console.error('Failed to fetch zones:', error);
+    throw error;
+  }
+};

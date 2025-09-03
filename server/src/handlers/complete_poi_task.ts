@@ -1,16 +1,27 @@
+import { db } from '../db';
+import { poiTasksTable } from '../db/schema';
 import { type CompletePoiTaskInput, type PoiTask } from '../schema';
+import { eq } from 'drizzle-orm';
 
-export async function completePoiTask(input: CompletePoiTaskInput): Promise<PoiTask> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is marking a POI task as completed.
-    // Should validate that the task exists and belongs to the requesting user
-    // Should set status to 'completed' and update completed_at timestamp
-    return Promise.resolve({
-        id: input.task_id,
-        poi_id: 0,
-        user_id: 0,
+export const completePoiTask = async (input: CompletePoiTaskInput): Promise<PoiTask> => {
+  try {
+    // Update the task status to 'completed' and set completed_at timestamp
+    const result = await db.update(poiTasksTable)
+      .set({
         status: 'completed',
-        assigned_at: new Date(),
         completed_at: new Date()
-    } as PoiTask);
-}
+      })
+      .where(eq(poiTasksTable.id, input.task_id))
+      .returning()
+      .execute();
+
+    if (result.length === 0) {
+      throw new Error(`POI task with ID ${input.task_id} not found`);
+    }
+
+    return result[0];
+  } catch (error) {
+    console.error('POI task completion failed:', error);
+    throw error;
+  }
+};
