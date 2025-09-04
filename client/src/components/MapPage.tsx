@@ -18,6 +18,7 @@ import {
   Edit,
   CheckCircle
 } from 'lucide-react';
+import { InteractiveMap } from './InteractiveMap';
 import type { 
   User, 
   Zone, 
@@ -125,6 +126,15 @@ export function MapPage({ user }: MapPageProps) {
     }
   };
 
+  // Map interaction handlers
+  const handleZoneGeometryUpdate = useCallback((geometry: string) => {
+    setZoneForm(prev => ({ ...prev, geometry }));
+  }, []);
+
+  const handlePoiLocationUpdate = useCallback((latitude: number, longitude: number) => {
+    setPoiForm(prev => ({ ...prev, latitude, longitude }));
+  }, []);
+
   // User functions
   const handleUpdateProgress = async (assignmentId: number, progressHouses: number) => {
     try {
@@ -231,36 +241,195 @@ export function MapPage({ user }: MapPageProps) {
         </div>
       </div>
 
-      {/* Map Placeholder */}
+      {/* Interactive Map */}
       {currentView === 'map' && (
-        <Card>
-          <CardContent className="p-0">
-            <div className="h-96 bg-gradient-to-br from-blue-100 to-green-100 rounded-lg flex items-center justify-center">
-              <div className="text-center">
-                <MapIcon className="w-16 h-16 mx-auto mb-4 text-blue-600" />
-                <h3 className="text-xl font-semibold text-gray-800 mb-2">Carte Interactive</h3>
-                <p className="text-gray-600 max-w-md">
-                  La carte interactive sera intégrée ici avec Leaflet/OpenStreetMap.
-                  Elle affichera la localisation en temps réel, les zones et points d'intérêt.
-                </p>
-                <div className="mt-4 flex justify-center space-x-4">
-                  <div className="flex items-center text-sm">
+        <div className="space-y-6">
+          <Card>
+            <CardContent className="p-4">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold mb-2">Carte Interactive</h3>
+                <div className="flex justify-center space-x-6 text-sm">
+                  <div className="flex items-center">
                     <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
                     Zones ({zones.length})
                   </div>
-                  <div className="flex items-center text-sm">
+                  <div className="flex items-center">
                     <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
                     POIs ({pois.length})
                   </div>
-                  <div className="flex items-center text-sm">
+                  <div className="flex items-center">
                     <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
                     Ma position
                   </div>
+                  {user.role === 'admin' && (
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-purple-500 rounded-full mr-2"></div>
+                      Outils de dessin
+                    </div>
+                  )}
                 </div>
               </div>
+              <InteractiveMap
+                user={user}
+                zones={zones}
+                pois={pois}
+                isLoading={isLoading}
+                onZoneGeometryUpdate={handleZoneGeometryUpdate}
+                onPoiLocationUpdate={handlePoiLocationUpdate}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Admin Quick Create Forms */}
+          {user.role === 'admin' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Quick Zone Form */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Créer une Zone</CardTitle>
+                  <p className="text-sm text-gray-600">
+                    Dessinez un polygone sur la carte puis remplissez les détails
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleCreateZone} className="space-y-4">
+                    <div>
+                      <Label htmlFor="quickZoneName">Nom de la zone</Label>
+                      <Input
+                        id="quickZoneName"
+                        value={zoneForm.name}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          setZoneForm(prev => ({ ...prev, name: e.target.value }))
+                        }
+                        placeholder="Secteur Centre-ville"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label htmlFor="quickEstimatedHouses">Maisons</Label>
+                        <Input
+                          id="quickEstimatedHouses"
+                          type="number"
+                          value={zoneForm.estimated_houses}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            setZoneForm(prev => ({ ...prev, estimated_houses: parseInt(e.target.value) || 0 }))
+                          }
+                          min="0"
+                          required
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <Button type="submit" className="w-full">
+                          <Save className="w-4 h-4 mr-2" />
+                          Créer
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="quickZoneDescription">Description</Label>
+                      <Textarea
+                        id="quickZoneDescription"
+                        value={zoneForm.description || ''}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                          setZoneForm(prev => ({ ...prev, description: e.target.value || null }))
+                        }
+                        placeholder="Description de la zone..."
+                        rows={2}
+                      />
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+
+              {/* Quick POI Form */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Créer un POI</CardTitle>
+                  <p className="text-sm text-gray-600">
+                    Placez un marqueur sur la carte puis remplissez les détails
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleCreatePoi} className="space-y-4">
+                    <div>
+                      <Label htmlFor="quickPoiName">Nom du POI</Label>
+                      <Input
+                        id="quickPoiName"
+                        value={poiForm.name}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          setPoiForm(prev => ({ ...prev, name: e.target.value }))
+                        }
+                        placeholder="Panneau Place République"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label htmlFor="quickPoiType">Type</Label>
+                        <Select 
+                          value={poiForm.poi_type || 'billboard'} 
+                          onValueChange={(value: 'billboard' | 'wall' | 'other') =>
+                            setPoiForm(prev => ({ ...prev, poi_type: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="billboard">📋 Panneau</SelectItem>
+                            <SelectItem value="wall">🧱 Mur</SelectItem>
+                            <SelectItem value="other">📍 Autre</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-end">
+                        <Button type="submit" className="w-full">
+                          <Save className="w-4 h-4 mr-2" />
+                          Créer
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label>Latitude</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={poiForm.latitude}
+                          readOnly
+                          className="bg-gray-50"
+                        />
+                      </div>
+                      <div>
+                        <Label>Longitude</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={poiForm.longitude}
+                          readOnly
+                          className="bg-gray-50"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="quickPoiDescription">Description</Label>
+                      <Textarea
+                        id="quickPoiDescription"
+                        value={poiForm.description || ''}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                          setPoiForm(prev => ({ ...prev, description: e.target.value || null }))
+                        }
+                        placeholder="Description du POI..."
+                        rows={2}
+                      />
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </div>
       )}
 
       {/* Zones View */}
