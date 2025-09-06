@@ -19,12 +19,17 @@ import type {
 } from '../../../server/src/schema';
 
 // Fix for default markers in react-leaflet
-delete (L.Icon.Default.prototype as L.Icon.Default & { _getIconUrl?: unknown })._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
+try {
+  delete (L.Icon.Default.prototype as L.Icon.Default & { _getIconUrl?: unknown })._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  });
+  console.log('✅ Leaflet default icon fix applied successfully');
+} catch (error) {
+  console.error('❌ Failed to apply Leaflet icon fix:', error);
+}
 
 interface InteractiveMapProps {
   user: User;
@@ -35,17 +40,40 @@ interface InteractiveMapProps {
   onPoiLocationUpdate: (latitude: number, longitude: number) => void;
 }
 
+// Component to handle map initialization and size validation
+function MapInitializer() {
+  const map = useMapEvents({});
+
+  useEffect(() => {
+    console.log('🗺️ Map instance created successfully:', map);
+    // Force container size validation after mount
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+      console.log('🔄 Map size invalidated and recalculated');
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [map]);
+
+  return null;
+}
+
 // Component to handle user location
 function LocationMarker() {
   const [position, setPosition] = useState<L.LatLng | null>(null);
   const map = useMapEvents({
     locationfound(e) {
+      console.log('📍 Geolocation successful:', e.latlng);
       setPosition(e.latlng);
       map.flyTo(e.latlng, map.getZoom());
+    },
+    locationerror(e) {
+      console.error('❌ Geolocation failed:', e.message);
     },
   });
 
   useEffect(() => {
+    console.log('🌍 Starting geolocation...');
     map.locate({
       watch: true,
       enableHighAccuracy: true
@@ -90,6 +118,45 @@ export function InteractiveMap({
 }: InteractiveMapProps) {
   // Default center: Paris coordinates
   const defaultCenter: [number, number] = [48.8566, 2.3522];
+  
+  // State for error handling - must be declared at top level
+  const [mapError, setMapError] = useState<string | null>(null);
+  
+  useEffect(() => {
+    console.log('🗺️ InteractiveMap component mounted');
+    console.log('📊 Map data:', { 
+      zonesCount: zones.length, 
+      poisCount: pois.length, 
+      userRole: user.role,
+      isLoading 
+    });
+    
+    // Debug Leaflet and CSS loading
+    console.log('🔍 Leaflet version:', L.version);
+    console.log('🎨 Leaflet CSS check:', {
+      leafletCSS: !!document.querySelector('link[href*="leaflet.css"], style[data-leaflet]'),
+      leafletDrawCSS: !!document.querySelector('link[href*="leaflet.draw.css"], style[data-leaflet-draw]'),
+      mapContainerInDOM: !!document.querySelector('.leaflet-container')
+    });
+  }, [zones.length, pois.length, user.role, isLoading]);
+
+  // Use error boundary for map rendering
+  useEffect(() => {
+    const checkMapRender = () => {
+      setTimeout(() => {
+        const mapElement = document.querySelector('.leaflet-container');
+        if (!mapElement) {
+          setMapError('Map container not found in DOM');
+          console.error('❌ Leaflet container not rendered');
+        } else {
+          console.log('✅ Map container found in DOM');
+          setMapError(null);
+        }
+      }, 1000);
+    };
+
+    checkMapRender();
+  }, []);
 
   const handleCreated = useCallback((e: L.DrawEvents.Created) => {
     const { layerType, layer } = e;
@@ -131,17 +198,73 @@ export function InteractiveMap({
     );
   }
 
+  if (mapError && process.env.NODE_ENV === 'development') {
+    return (
+      <div className="h-96 bg-red-50 border-2 border-red-200 rounded-lg flex items-center justify-center">
+        <div className="text-center p-4">
+          <div className="text-red-600 text-2xl mb-2">⚠️</div>
+          <h3 className="font-semibold text-red-800 mb-2">Map Rendering Issue</h3>
+          <p className="text-red-600 text-sm mb-3">{mapError}</p>
+          <div className="text-xs text-red-500 space-y-1">
+            <div>Leaflet version: {L.version}</div>
+            <div>Zones: {zones.length} | POIs: {pois.length}</div>
+            <div>Check browser console for detailed logs</div>
+          </div>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-3 px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <MapContainer
-      center={defaultCenter}
-      zoom={12}
-      className="h-96 w-full rounded-lg"
-      style={{ zIndex: 1 }}
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+    <div className="relative">
+      {/* Debug overlay - visible in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div 
+          className="absolute top-2 left-2 z-[1000] bg-yellow-400 text-black px-2 py-1 rounded text-xs font-mono border-2 border-black"
+          style={{ zIndex: 1000 }}
+        >
+          🗺️ Map Container Active
+          <br />
+          Zones: {zones.length} | POIs: {pois.length}
+          <br />
+          Role: {user.role}
+        </div>
+      )}
+      
+      <MapContainer
+        center={defaultCenter}
+        zoom={12}
+        className="h-96 w-full rounded-lg leaflet-container"
+        style={{ 
+          zIndex: 1,
+          minHeight: '384px', // Ensure explicit height
+          width: '100%',
+          height: '384px',
+          display: 'block', // Ensure it's visible
+          position: 'relative'
+        }}
+        whenReady={() => {
+          console.log('✅ MapContainer successfully mounted and ready');
+        }}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          eventHandlers={{
+            loading: () => console.log('🔄 Tiles loading...'),
+            load: () => console.log('✅ Tiles loaded successfully'),
+            tileerror: (e) => console.error('❌ Tile loading error:', e),
+          }}
+        />
+
+      {/* Map initialization and size validation */}
+      <MapInitializer />
 
       {/* User location marker */}
       <LocationMarker />
@@ -276,5 +399,6 @@ export function InteractiveMap({
         </FeatureGroup>
       )}
     </MapContainer>
+    </div>
   );
 }
